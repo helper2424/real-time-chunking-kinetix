@@ -240,7 +240,7 @@ class FlowPolicy(nnx.Module):
                 error = (y - x_1) * weights[:, None]
                 pinv_correction = vjp_fun(error)[0]
 
-                jax.info.print("pinv_correction={pinv_correction}", pinv_correction=pinv_correction)
+                jax.debug.print("pinv_correction={pinv_correction}", pinv_correction=pinv_correction)
                 jax.debug.print("error={error}", error=error)
                 jax.debug.print("--------------------------------")
                 print(pinv_correction)
