@@ -243,6 +243,9 @@ class FlowPolicy(nnx.Module):
                 jax.debug.print("pinv_correction: {pinv_correction}", pinv_correction=pinv_correction)
                 jax.debug.print("error: {error}", error=error)
                 jax.debug.print("--------------------------------")
+                print(pinv_correction)
+                print(error)
+                print("--------------------------------")
                 # constants from paper
                 inv_r2 = (t**2 + (1 - t) ** 2) / ((1 - t) ** 2)
                 c = jnp.nan_to_num((1 - t) / t, posinf=max_guidance_weight)
