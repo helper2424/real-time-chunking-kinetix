@@ -85,8 +85,9 @@ def eval(
                 config.inference_delay <= policy.action_chunk_size
                 and prefix_attention_horizon <= policy.action_chunk_size
             ), f"{config.inference_delay=} {prefix_attention_horizon=} {policy.action_chunk_size=}"
-            print(
-                f"{config.execute_horizon=} {config.inference_delay=} {prefix_attention_horizon=} {policy.action_chunk_size=}"
+            jax.debug.print(
+                "execute_horizon={} inference_delay={} prefix_attention_horizon={} action_chunk_size={}",
+                config.execute_horizon, config.inference_delay, prefix_attention_horizon, policy.action_chunk_size
             )
             next_action_chunk = policy.realtime_action(
                 key,
@@ -248,7 +249,7 @@ def main(
     rngs = jax.random.split(jax.random.key(seed), len(level_paths))
     results = collections.defaultdict(list)
     for inference_delay in [3]:
-        for execute_horizon in range(max(1, inference_delay), 8 - inference_delay + 1):
+        for execute_horizon in [6]:
             print(f"{inference_delay=} {execute_horizon=}")
             c = dataclasses.replace(
                 config, inference_delay=inference_delay, execute_horizon=execute_horizon, method=NaiveMethodConfig()
