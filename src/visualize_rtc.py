@@ -390,3 +390,192 @@ def plot_rtc_comparison_grid(
 
     plt.tight_layout()
     return fig
+
+
+def plot_trajectory_comparison(
+    rtc_tracked: dict,
+    no_rtc_tracked: dict,
+    variable_name: str,  # "x_t" or "v_t"
+    batch_idx: int = 0,
+    action_dim_indices: list[int] | None = None,
+    figsize: tuple[int, int] = (20, 16),
+) -> Figure:
+    """Compare trajectories with color gradient for each horizon step.
+
+    Creates a side-by-side comparison (No RTC vs With RTC) where each subplot
+    shows one action dimension. Within each subplot, multiple lines represent
+    different horizon steps, with a color gradient showing progression through
+    denoising steps.
+
+    Args:
+        rtc_tracked: Tracked steps from realtime_action with RTC
+        no_rtc_tracked: Tracked steps from regular action (no RTC)
+        variable_name: Which variable to plot ("x_t" or "v_t")
+        batch_idx: Which batch element to visualize
+        action_dim_indices: List of action dimensions to plot (if None, plots all)
+        figsize: Figure size (width, height)
+
+    Returns:
+        Matplotlib Figure object
+    """
+    import matplotlib.cm as cm
+    from matplotlib.colors import Normalize
+
+    # Extract data: [num_steps, batch, horizon, action_dim]
+    rtc_data = np.array(rtc_tracked[variable_name][:, batch_idx])  # [num_steps, horizon, action_dim]
+    no_rtc_data = np.array(no_rtc_tracked[variable_name][:, batch_idx])
+
+    num_steps, horizon, action_dim = rtc_data.shape
+    step_indices = np.arange(num_steps)
+
+    if action_dim_indices is None:
+        action_dim_indices = list(range(action_dim))
+
+    num_dims = len(action_dim_indices)
+
+    # Create figure with 2 columns (No RTC, With RTC)
+    fig, axes = plt.subplots(num_dims, 2, figsize=figsize, sharex=True, sharey='row')
+
+    if num_dims == 1:
+        axes = axes.reshape(1, -1)
+
+    # Title
+    var_label = "State (x_t)" if variable_name == "x_t" else "Velocity (v_t)"
+    fig.suptitle(f"{var_label} Comparison: No RTC vs With RTC", fontsize=18, fontweight="bold", y=0.995)
+
+    # Column titles
+    fig.text(0.25, 0.97, "Without RTC", ha='center', fontsize=15, fontweight='bold', color='#333')
+    fig.text(0.75, 0.97, "With RTC", ha='center', fontsize=15, fontweight='bold', color='#333')
+
+    # Color gradient for horizon steps
+    cmap = cm.viridis
+    norm = Normalize(vmin=0, vmax=horizon - 1)
+
+    for i, dim_idx in enumerate(action_dim_indices):
+        # Plot each horizon step with color gradient
+        for h in range(horizon):
+            color = cmap(norm(h))
+
+            # Left: No RTC
+            axes[i, 0].plot(step_indices, no_rtc_data[:, h, dim_idx],
+                          linewidth=2, alpha=0.7, color=color, label=f'h={h}' if i == 0 and h < 3 else None)
+
+            # Right: With RTC
+            axes[i, 1].plot(step_indices, rtc_data[:, h, dim_idx],
+                          linewidth=2, alpha=0.7, color=color, label=f'h={h}' if i == 0 and h < 3 else None)
+
+        # Formatting
+        axes[i, 0].set_ylabel(f"Dim {dim_idx}", fontsize=12, fontweight="bold")
+        axes[i, 0].grid(True, alpha=0.3, linestyle='--')
+        axes[i, 1].grid(True, alpha=0.3, linestyle='--')
+
+        # Add legend only to first row
+        if i == 0:
+            axes[i, 0].legend(loc='upper right', fontsize=9, framealpha=0.9)
+            axes[i, 1].legend(loc='upper right', fontsize=9, framealpha=0.9)
+
+    # X-axis labels
+    axes[-1, 0].set_xlabel("Denoising Step", fontsize=12, fontweight="bold")
+    axes[-1, 1].set_xlabel("Denoising Step", fontsize=12, fontweight="bold")
+
+    # Add colorbar to show horizon progression
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar_ax = fig.add_axes([0.92, 0.15, 0.015, 0.7])
+    cbar = fig.colorbar(sm, cax=cbar_ax)
+    cbar.set_label('Horizon Step', fontsize=11, fontweight='bold')
+
+    plt.tight_layout(rect=[0, 0, 0.91, 0.96])
+    return fig
+
+
+def plot_overlay_comparison(
+    rtc_tracked: dict,
+    no_rtc_tracked: dict,
+    batch_idx: int = 0,
+    action_dim_indices: list[int] | None = None,
+    figsize: tuple[int, int] = (20, 16),
+) -> Figure:
+    """Compare x_t trajectories overlaid (No RTC vs With RTC on same subplot).
+
+    Each subplot shows one action dimension with both RTC and non-RTC trajectories
+    overlaid, using different color gradients for each.
+
+    Args:
+        rtc_tracked: Tracked steps from realtime_action with RTC
+        no_rtc_tracked: Tracked steps from regular action (no RTC)
+        batch_idx: Which batch element to visualize
+        action_dim_indices: List of action dimensions to plot (if None, plots all)
+        figsize: Figure size (width, height)
+
+    Returns:
+        Matplotlib Figure object
+    """
+    import matplotlib.cm as cm
+    from matplotlib.colors import Normalize
+
+    # Extract data: [num_steps, batch, horizon, action_dim]
+    rtc_data = np.array(rtc_tracked["x_t"][:, batch_idx])  # [num_steps, horizon, action_dim]
+    no_rtc_data = np.array(no_rtc_tracked["x_t"][:, batch_idx])
+
+    num_steps, horizon, action_dim = rtc_data.shape
+    step_indices = np.arange(num_steps)
+
+    if action_dim_indices is None:
+        action_dim_indices = list(range(action_dim))
+
+    num_dims = len(action_dim_indices)
+
+    # Create figure with single column
+    fig, axes = plt.subplots(num_dims, 1, figsize=figsize, sharex=True)
+
+    if num_dims == 1:
+        axes = [axes]
+
+    fig.suptitle("Overlay Comparison: No RTC vs With RTC", fontsize=18, fontweight="bold", y=0.995)
+
+    # Color gradients (blues for No RTC, oranges for RTC)
+    cmap_no_rtc = cm.Blues
+    cmap_rtc = cm.Oranges
+    norm = Normalize(vmin=0, vmax=horizon - 1)
+
+    for i, dim_idx in enumerate(action_dim_indices):
+        # Plot each horizon step
+        for h in range(horizon):
+            color_no = cmap_no_rtc(norm(h) * 0.7 + 0.3)  # Scale to avoid too light colors
+            color_yes = cmap_rtc(norm(h) * 0.7 + 0.3)
+
+            # No RTC (solid line)
+            axes[i].plot(step_indices, no_rtc_data[:, h, dim_idx],
+                        linewidth=2, alpha=0.6, color=color_no, linestyle='-',
+                        label=f'No RTC h={h}' if h < 2 else None)
+
+            # With RTC (dashed line)
+            axes[i].plot(step_indices, rtc_data[:, h, dim_idx],
+                        linewidth=2, alpha=0.6, color=color_yes, linestyle='--',
+                        label=f'RTC h={h}' if h < 2 else None)
+
+        # Formatting
+        axes[i].set_ylabel(f"Dim {dim_idx}\nx_t", fontsize=12, fontweight="bold")
+        axes[i].grid(True, alpha=0.3, linestyle='--')
+
+        if i == 0:
+            axes[i].legend(loc='upper right', fontsize=9, ncol=2, framealpha=0.9)
+
+    axes[-1].set_xlabel("Denoising Step", fontsize=12, fontweight="bold")
+
+    # Add dual colorbars
+    sm_no = cm.ScalarMappable(cmap=cmap_no_rtc, norm=norm)
+    sm_no.set_array([])
+    cbar_ax_no = fig.add_axes([0.92, 0.55, 0.015, 0.35])
+    cbar_no = fig.colorbar(sm_no, cax=cbar_ax_no)
+    cbar_no.set_label('No RTC\nHorizon', fontsize=10, fontweight='bold')
+
+    sm_rtc = cm.ScalarMappable(cmap=cmap_rtc, norm=norm)
+    sm_rtc.set_array([])
+    cbar_ax_rtc = fig.add_axes([0.92, 0.15, 0.015, 0.35])
+    cbar_rtc = fig.colorbar(sm_rtc, cax=cbar_ax_rtc)
+    cbar_rtc.set_label('With RTC\nHorizon', fontsize=10, fontweight='bold')
+
+    plt.tight_layout(rect=[0, 0, 0.91, 0.96])
+    return fig

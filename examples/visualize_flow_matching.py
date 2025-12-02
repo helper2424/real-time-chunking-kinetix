@@ -22,8 +22,8 @@ sys.path.append("../src")
 import model as _model
 import train_expert
 from visualize_rtc import (
-    plot_rtc_comparison,
-    plot_rtc_comparison_grid,
+    plot_trajectory_comparison,
+    plot_overlay_comparison,
 )
 
 
@@ -196,31 +196,47 @@ def main(
 
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    # Plot 1: Side-by-side comparison for single dimension
-    print("\nGenerating RTC vs No-RTC comparison plot...")
-    fig1 = plot_rtc_comparison(
+    # Plot 1: x_t (State) trajectory comparison
+    print("\nGenerating x_t (state) trajectory comparison...")
+    fig1 = plot_trajectory_comparison(
         rtc_tracked=rtc_tracked,
         no_rtc_tracked=no_rtc_tracked,
+        variable_name="x_t",
         batch_idx=config.batch_idx,
-        action_dim_idx=config.action_dim_indices[0] if config.action_dim_indices else 0,
-        horizon_idx=config.horizon_idx,
+        action_dim_indices=list(config.action_dim_indices) if config.action_dim_indices else None,
     )
-    path1 = pathlib.Path(output_dir) / f"rtc_comparison_batch{config.batch_idx}.png"
+    path1 = pathlib.Path(output_dir) / f"x_t_comparison_batch{config.batch_idx}.png"
     fig1.savefig(path1, dpi=150, bbox_inches="tight")
     print(f"  Saved: {path1.name}")
+    import matplotlib.pyplot as plt
+    plt.close(fig1)
 
-    # Plot 2: Multi-dimension grid comparison
-    print("\nGenerating multi-dimension grid comparison...")
-    fig2 = plot_rtc_comparison_grid(
+    # Plot 2: v_t (Velocity) trajectory comparison
+    print("\nGenerating v_t (velocity) trajectory comparison...")
+    fig2 = plot_trajectory_comparison(
+        rtc_tracked=rtc_tracked,
+        no_rtc_tracked=no_rtc_tracked,
+        variable_name="v_t",
+        batch_idx=config.batch_idx,
+        action_dim_indices=list(config.action_dim_indices) if config.action_dim_indices else None,
+    )
+    path2 = pathlib.Path(output_dir) / f"v_t_comparison_batch{config.batch_idx}.png"
+    fig2.savefig(path2, dpi=150, bbox_inches="tight")
+    print(f"  Saved: {path2.name}")
+    plt.close(fig2)
+
+    # Plot 3: Overlay comparison
+    print("\nGenerating overlay comparison...")
+    fig3 = plot_overlay_comparison(
         rtc_tracked=rtc_tracked,
         no_rtc_tracked=no_rtc_tracked,
         batch_idx=config.batch_idx,
-        action_dim_indices=list(config.action_dim_indices),
-        horizon_idx=config.horizon_idx,
+        action_dim_indices=list(config.action_dim_indices) if config.action_dim_indices else None,
     )
-    path2 = pathlib.Path(output_dir) / f"rtc_comparison_grid_batch{config.batch_idx}.png"
-    fig2.savefig(path2, dpi=150, bbox_inches="tight")
-    print(f"  Saved: {path2.name}")
+    path3 = pathlib.Path(output_dir) / f"overlay_comparison_batch{config.batch_idx}.png"
+    fig3.savefig(path3, dpi=150, bbox_inches="tight")
+    print(f"  Saved: {path3.name}")
+    plt.close(fig3)
 
     # Summary statistics
     print("\n" + "=" * 80)
