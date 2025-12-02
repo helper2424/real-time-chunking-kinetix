@@ -221,7 +221,8 @@ class FlowPolicy(nnx.Module):
         prefix_attention_horizon: int,
         prefix_attention_schedule: PrefixAttentionSchedule,
         max_guidance_weight: float,
-    ) -> jax.Array:
+        return_tracking: bool = False,
+    ) -> jax.Array | tuple[jax.Array, dict]:
         dt = 1 / num_steps
 
         def step(carry, _):
@@ -240,24 +241,34 @@ class FlowPolicy(nnx.Module):
                 error = (y - x_1) * weights[:, None]
                 pinv_correction = vjp_fun(error)[0]
 
-                jax.debug.print("pinv_correction={pinv_correction}", pinv_correction=pinv_correction)
-                jax.debug.print("error={error}", error=error)
-                jax.debug.print("--------------------------------")
-                print(pinv_correction)
-                print(error)
-                print("--------------------------------")
                 # constants from paper
                 inv_r2 = (t**2 + (1 - t) ** 2) / ((1 - t) ** 2)
                 c = jnp.nan_to_num((1 - t) / t, posinf=max_guidance_weight)
                 guidance_weight = jnp.minimum(c * inv_r2, max_guidance_weight)
-                return v_t + guidance_weight * pinv_correction
+                corrected_v_t = v_t + guidance_weight * pinv_correction
 
-            v_t = pinv_corrected_velocity(obs, x_t, prev_action_chunk, time)
-            return (x_t + dt * v_t, time + dt), None
+                return corrected_v_t, (v_t, pinv_correction, error, x_1)
+
+            v_t_corrected, tracking_data = pinv_corrected_velocity(obs, x_t, prev_action_chunk, time)
+
+            # Store tracking data for this step
+            step_data = {
+                "x_t": x_t,
+                "v_t": tracking_data[0],
+                "correction": tracking_data[1],
+                "error": tracking_data[2],
+                "x_1_pred": tracking_data[3],
+                "time": time,
+            }
+
+            return (x_t + dt * v_t_corrected, time + dt), step_data
 
         noise = jax.random.normal(rng, shape=(obs.shape[0], self.action_chunk_size, self.action_dim))
-        (x_1, _), _ = jax.lax.scan(step, (noise, 0.0), length=num_steps)
+        (x_1, _), tracked_steps = jax.lax.scan(step, (noise, 0.0), jnp.arange(num_steps))
         assert x_1.shape == (obs.shape[0], self.action_chunk_size, self.action_dim), x_1.shape
+
+        if return_tracking:
+            return x_1, tracked_steps
         return x_1
 
     def loss(self, rng: jax.Array, obs: jax.Array, action: jax.Array):
