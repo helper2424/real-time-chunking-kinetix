@@ -398,6 +398,7 @@ def plot_trajectory_comparison(
     variable_name: str,  # "x_t" or "v_t"
     batch_idx: int = 0,
     action_dim_indices: list[int] | None = None,
+    prev_action_chunk: np.ndarray | None = None,
     figsize: tuple[int, int] = (20, 16),
 ) -> Figure:
     """Compare trajectories with color gradient for each horizon step.
@@ -413,6 +414,7 @@ def plot_trajectory_comparison(
         variable_name: Which variable to plot ("x_t" or "v_t")
         batch_idx: Which batch element to visualize
         action_dim_indices: List of action dimensions to plot (if None, plots all)
+        prev_action_chunk: Previous action chunk [batch, horizon, action_dim] to overlay (red lines)
         figsize: Figure size (width, height)
 
     Returns:
@@ -464,6 +466,14 @@ def plot_trajectory_comparison(
             axes[i, 1].plot(step_indices, rtc_data[:, h, dim_idx],
                           linewidth=2, alpha=0.7, color=color, label=f'h={h}' if i == 0 and h < 3 else None)
 
+            # Overlay previous action chunk as red horizontal lines (only for x_t)
+            if prev_action_chunk is not None and variable_name == "x_t":
+                prev_value = prev_action_chunk[batch_idx, h, dim_idx]
+                axes[i, 0].axhline(y=prev_value, color='red', linestyle='--', linewidth=1.5, alpha=0.6,
+                                  label='Prev chunk' if i == 0 and h == 0 else None)
+                axes[i, 1].axhline(y=prev_value, color='red', linestyle='--', linewidth=1.5, alpha=0.6,
+                                  label='Prev chunk' if i == 0 and h == 0 else None)
+
         # Formatting
         axes[i, 0].set_ylabel(f"Dim {dim_idx}", fontsize=12, fontweight="bold")
         axes[i, 0].grid(True, alpha=0.3, linestyle='--')
@@ -494,6 +504,7 @@ def plot_overlay_comparison(
     no_rtc_tracked: dict,
     batch_idx: int = 0,
     action_dim_indices: list[int] | None = None,
+    prev_action_chunk: np.ndarray | None = None,
     figsize: tuple[int, int] = (20, 16),
 ) -> Figure:
     """Compare x_t trajectories overlaid (No RTC vs With RTC on same subplot).
@@ -506,6 +517,7 @@ def plot_overlay_comparison(
         no_rtc_tracked: Tracked steps from regular action (no RTC)
         batch_idx: Which batch element to visualize
         action_dim_indices: List of action dimensions to plot (if None, plots all)
+        prev_action_chunk: Previous action chunk [batch, horizon, action_dim] to overlay (red lines)
         figsize: Figure size (width, height)
 
     Returns:
@@ -554,6 +566,12 @@ def plot_overlay_comparison(
             axes[i].plot(step_indices, rtc_data[:, h, dim_idx],
                         linewidth=2, alpha=0.6, color=color_yes, linestyle='--',
                         label=f'RTC h={h}' if h < 2 else None)
+
+            # Overlay previous action chunk as red horizontal lines
+            if prev_action_chunk is not None:
+                prev_value = prev_action_chunk[batch_idx, h, dim_idx]
+                axes[i].axhline(y=prev_value, color='red', linestyle=':', linewidth=2, alpha=0.7,
+                               label='Prev chunk' if h == 0 else None)
 
         # Formatting
         axes[i].set_ylabel(f"Dim {dim_idx}\nx_t", fontsize=12, fontweight="bold")

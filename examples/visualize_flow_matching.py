@@ -196,7 +196,7 @@ def main(
 
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    # Plot 1: x_t (State) trajectory comparison
+    # Plot 1: x_t (State) trajectory comparison with prev_action_chunk
     print("\nGenerating x_t (state) trajectory comparison...")
     fig1 = plot_trajectory_comparison(
         rtc_tracked=rtc_tracked,
@@ -204,6 +204,7 @@ def main(
         variable_name="x_t",
         batch_idx=config.batch_idx,
         action_dim_indices=list(config.action_dim_indices) if config.action_dim_indices else None,
+        prev_action_chunk=jax.device_get(prev_action_chunk),
     )
     path1 = pathlib.Path(output_dir) / f"x_t_comparison_batch{config.batch_idx}.png"
     fig1.savefig(path1, dpi=150, bbox_inches="tight")
@@ -225,13 +226,14 @@ def main(
     print(f"  Saved: {path2.name}")
     plt.close(fig2)
 
-    # Plot 3: Overlay comparison
+    # Plot 3: Overlay comparison with prev_action_chunk
     print("\nGenerating overlay comparison...")
     fig3 = plot_overlay_comparison(
         rtc_tracked=rtc_tracked,
         no_rtc_tracked=no_rtc_tracked,
         batch_idx=config.batch_idx,
         action_dim_indices=list(config.action_dim_indices) if config.action_dim_indices else None,
+        prev_action_chunk=jax.device_get(prev_action_chunk),
     )
     path3 = pathlib.Path(output_dir) / f"overlay_comparison_batch{config.batch_idx}.png"
     fig3.savefig(path3, dpi=150, bbox_inches="tight")
