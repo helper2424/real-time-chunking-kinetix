@@ -221,7 +221,7 @@ class FlowPolicy(nnx.Module):
         prefix_attention_horizon: int,
         prefix_attention_schedule: PrefixAttentionSchedule,
         max_guidance_weight: float,
-        return_tracking: bool = False,
+        return_tracking: bool = True,
     ) -> jax.Array | tuple[jax.Array, dict]:
         dt = 1 / num_steps
 
