@@ -73,13 +73,15 @@ def main(
     static_env_params = kenv_state.StaticEnvParams(
         **train_expert.LARGE_ENV_PARAMS,
         frame_skip=train_expert.FRAME_SKIP,
-        screen_dim=train_expert.SCREEN_DIM,
     )
     env_params = kenv_state.EnvParams()
 
-    # Load level
+    # Load level (don't set screen_dim yet - it comes from the level file)
     levels = train_expert.load_levels([level_path], static_env_params, env_params)
     level = jax.tree.map(lambda x: x[0], levels)
+
+    # Now update screen_dim for rendering
+    static_env_params = static_env_params.replace(screen_dim=train_expert.SCREEN_DIM)
 
     # Create environment
     env = kenv.make_kinetix_env_from_name("Kinetix-Symbolic-Continuous-v1", static_env_params=static_env_params)
