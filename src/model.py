@@ -152,17 +152,27 @@ class FlowPolicy(nnx.Module):
         x = self.out_proj(x)
         return x
 
-    def action(self, rng: jax.Array, obs: jax.Array, num_steps: int) -> jax.Array:
+    def action(self, rng: jax.Array, obs: jax.Array, num_steps: int, return_tracking: bool = False) -> jax.Array | tuple[jax.Array, dict]:
         dt = 1 / num_steps
 
         def step(carry, _):
             x_t, time = carry
             v_t = self(obs, x_t, time)
-            return (x_t + dt * v_t, time + dt), None
+
+            step_data = {
+                "x_t": x_t,
+                "v_t": v_t,
+                "time": time,
+            }
+
+            return (x_t + dt * v_t, time + dt), step_data
 
         noise = jax.random.normal(rng, shape=(obs.shape[0], self.action_chunk_size, self.action_dim))
-        (x_1, _), _ = jax.lax.scan(step, (noise, 0.0), length=num_steps)
+        (x_1, _), tracked_steps = jax.lax.scan(step, (noise, 0.0), length=num_steps)
         assert x_1.shape == (obs.shape[0], self.action_chunk_size, self.action_dim), x_1.shape
+
+        if return_tracking:
+            return x_1, tracked_steps
         return x_1
 
     def bid_action(

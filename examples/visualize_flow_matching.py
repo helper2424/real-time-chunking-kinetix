@@ -1,7 +1,7 @@
 """Visualize RTC tracking with real trained model and environment data.
 
-This script loads a trained policy checkpoint and runs a single inference
-with tracking enabled to generate flow matching visualizations.
+This script loads a trained policy checkpoint and runs inference WITH and WITHOUT
+RTC to compare their behavior side by side.
 """
 
 import dataclasses
@@ -22,10 +22,8 @@ sys.path.append("../src")
 import model as _model
 import train_expert
 from visualize_rtc import (
-    plot_flow_matching_steps,
-    plot_error_over_steps,
-    plot_comparison_grid,
-    save_tracking_plots,
+    plot_rtc_comparison,
+    plot_rtc_comparison_grid,
 )
 
 
@@ -54,9 +52,9 @@ def main(
     level_path: str = "worlds/l/grasp_easy.json",
     config: VisualizeConfig = VisualizeConfig(),
     seed: int = 0,
-    output_dir: str = "rtc_plots",
+    output_dir: str = "rtc_comparison_plots",
 ):
-    """Run single inference with tracking and generate visualizations.
+    """Run inference with and without RTC, then generate comparison visualizations.
 
     Args:
         run_path: Path to training run directory containing checkpoints
@@ -65,7 +63,10 @@ def main(
         seed: Random seed
         output_dir: Directory to save visualization plots
     """
-    print(f"Loading checkpoint from: {run_path}")
+    print("=" * 80)
+    print("RTC vs No-RTC Comparison Visualization")
+    print("=" * 80)
+    print(f"\nLoading checkpoint from: {run_path}")
     print(f"Using level: {level_path}")
 
     # Setup environment (same as eval_flow.py)
@@ -103,7 +104,7 @@ def main(
 
     # Create policy and load weights
     rng = jax.random.key(seed)
-    policy_rng, reset_rng, action_rng = jax.random.split(rng, 3)
+    policy_rng, reset_rng, prev_rng, rtc_rng, no_rtc_rng = jax.random.split(rng, 5)
 
     policy = _model.FlowPolicy(
         obs_dim=obs_dim,
@@ -126,14 +127,20 @@ def main(
     if obs.ndim == 1:
         obs = obs[None, :]
 
-    # Generate initial action chunk (this will be the "previous" chunk)
-    prev_action_chunk = policy.action(action_rng, obs, config.num_flow_steps)
-    print(f"Initial action chunk shape: {prev_action_chunk.shape}")
+    # STEP 1: Generate initial action chunk (this will be the "previous" chunk for RTC)
+    print("\n" + "=" * 80)
+    print("STEP 1: Generating previous action chunk")
+    print("=" * 80)
+    prev_action_chunk = policy.action(prev_rng, obs, config.num_flow_steps)
+    print(f"Previous action chunk shape: {prev_action_chunk.shape}")
 
     # Calculate prefix attention horizon
     prefix_attention_horizon = policy.action_chunk_size - config.execute_horizon
 
-    print(f"\nRunning realtime_action with tracking...")
+    # STEP 2: Run inference WITH RTC (realtime_action with tracking)
+    print("\n" + "=" * 80)
+    print("STEP 2: Running inference WITH RTC")
+    print("=" * 80)
     print(f"  num_flow_steps: {config.num_flow_steps}")
     print(f"  inference_delay: {config.inference_delay}")
     print(f"  execute_horizon: {config.execute_horizon}")
@@ -141,9 +148,8 @@ def main(
     print(f"  prefix_attention_schedule: {config.prefix_attention_schedule}")
     print(f"  max_guidance_weight: {config.max_guidance_weight}")
 
-    # Run realtime_action with tracking enabled
-    action, tracked_steps = policy.realtime_action(
-        rng=action_rng,
+    rtc_action, rtc_tracked = policy.realtime_action(
+        rng=rtc_rng,
         obs=obs,
         num_steps=config.num_flow_steps,
         prev_action_chunk=prev_action_chunk,
@@ -154,42 +160,82 @@ def main(
         return_tracking=True,
     )
 
-    print(f"\nAction shape: {action.shape}")
-    print(f"Tracked steps keys: {tracked_steps.keys()}")
-    print(f"Number of steps tracked: {tracked_steps['x_t'].shape[0]}")
+    print(f"RTC action shape: {rtc_action.shape}")
+    print(f"RTC tracked keys: {rtc_tracked.keys()}")
+    print(f"RTC steps tracked: {rtc_tracked['x_t'].shape[0]}")
+
+    # STEP 3: Run inference WITHOUT RTC (regular action with tracking)
+    print("\n" + "=" * 80)
+    print("STEP 3: Running inference WITHOUT RTC")
+    print("=" * 80)
+    print(f"  num_flow_steps: {config.num_flow_steps}")
+
+    no_rtc_action, no_rtc_tracked = policy.action(
+        rng=no_rtc_rng,
+        obs=obs,
+        num_steps=config.num_flow_steps,
+        return_tracking=True,
+    )
+
+    print(f"No-RTC action shape: {no_rtc_action.shape}")
+    print(f"No-RTC tracked keys: {no_rtc_tracked.keys()}")
+    print(f"No-RTC steps tracked: {no_rtc_tracked['x_t'].shape[0]}")
 
     # Convert to numpy for visualization
-    tracked_steps = jax.device_get(tracked_steps)
+    rtc_tracked = jax.device_get(rtc_tracked)
+    no_rtc_tracked = jax.device_get(no_rtc_tracked)
 
-    # Generate visualizations
-    print(f"\nGenerating visualizations (batch_idx={config.batch_idx})...")
+    # STEP 4: Generate comparison visualizations
+    print("\n" + "=" * 80)
+    print("STEP 4: Generating comparison visualizations")
+    print("=" * 80)
+    print(f"Output directory: {output_dir}")
+    print(f"Batch index: {config.batch_idx}")
 
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    # Save all plots
-    saved_files = save_tracking_plots(
-        tracked_steps,
-        output_dir=output_dir,
+    # Plot 1: Side-by-side comparison for single dimension
+    print("\nGenerating RTC vs No-RTC comparison plot...")
+    fig1 = plot_rtc_comparison(
+        rtc_tracked=rtc_tracked,
+        no_rtc_tracked=no_rtc_tracked,
         batch_idx=config.batch_idx,
-        prefix="rtc",
+        action_dim_idx=config.action_dim_indices[0] if config.action_dim_indices else 0,
+        horizon_idx=config.horizon_idx,
     )
+    path1 = pathlib.Path(output_dir) / f"rtc_comparison_batch{config.batch_idx}.png"
+    fig1.savefig(path1, dpi=150, bbox_inches="tight")
+    print(f"  Saved: {path1.name}")
 
-    print(f"\nSaved {len(saved_files)} plots to {output_dir}/:")
-    for file in saved_files:
-        print(f"  - {pathlib.Path(file).name}")
-
-    # Also generate comparison grid with specified dimensions
-    fig = plot_comparison_grid(
-        tracked_steps,
+    # Plot 2: Multi-dimension grid comparison
+    print("\nGenerating multi-dimension grid comparison...")
+    fig2 = plot_rtc_comparison_grid(
+        rtc_tracked=rtc_tracked,
+        no_rtc_tracked=no_rtc_tracked,
         batch_idx=config.batch_idx,
         action_dim_indices=list(config.action_dim_indices),
         horizon_idx=config.horizon_idx,
     )
-    comparison_path = pathlib.Path(output_dir) / f"rtc_comparison_dims_{config.action_dim_indices}_batch{config.batch_idx}.png"
-    fig.savefig(comparison_path, dpi=150, bbox_inches="tight")
-    print(f"  - {comparison_path.name}")
+    path2 = pathlib.Path(output_dir) / f"rtc_comparison_grid_batch{config.batch_idx}.png"
+    fig2.savefig(path2, dpi=150, bbox_inches="tight")
+    print(f"  Saved: {path2.name}")
 
-    print(f"\nDone! All visualizations saved to: {output_dir}/")
+    # Summary statistics
+    print("\n" + "=" * 80)
+    print("SUMMARY")
+    print("=" * 80)
+
+    # Calculate difference in final actions
+    action_diff = jnp.linalg.norm(rtc_action - no_rtc_action)
+    print(f"Final action difference (L2 norm): {action_diff:.4f}")
+
+    # Calculate average correction magnitude
+    if "correction" in rtc_tracked:
+        avg_correction = jnp.mean(jnp.abs(rtc_tracked["correction"]))
+        print(f"Average RTC correction magnitude: {avg_correction:.4f}")
+
+    print(f"\nAll visualizations saved to: {output_dir}/")
+    print("=" * 80)
 
 
 if __name__ == "__main__":

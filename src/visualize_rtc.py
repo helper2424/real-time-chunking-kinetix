@@ -217,3 +217,176 @@ def save_tracking_plots(
     plt.close(fig3)
 
     return saved_files
+
+
+def plot_rtc_comparison(
+    rtc_tracked: dict,
+    no_rtc_tracked: dict,
+    batch_idx: int = 0,
+    action_dim_idx: int = 0,
+    horizon_idx: int = 0,
+    figsize: tuple[int, int] = (18, 10),
+) -> Figure:
+    """Compare RTC vs non-RTC flow matching side by side.
+
+    Args:
+        rtc_tracked: Tracked steps from realtime_action with RTC
+        no_rtc_tracked: Tracked steps from regular action (no RTC)
+        batch_idx: Which batch element to visualize
+        action_dim_idx: Which action dimension to visualize
+        horizon_idx: Which horizon step to visualize
+        figsize: Figure size (width, height)
+
+    Returns:
+        Matplotlib Figure object
+    """
+    # Extract RTC data
+    rtc_x_t = np.array(rtc_tracked["x_t"][:, batch_idx, horizon_idx, action_dim_idx])
+    rtc_v_t = np.array(rtc_tracked["v_t"][:, batch_idx, horizon_idx, action_dim_idx])
+    rtc_correction = np.array(rtc_tracked["correction"][:, batch_idx, horizon_idx, action_dim_idx])
+
+    # Extract non-RTC data
+    no_rtc_x_t = np.array(no_rtc_tracked["x_t"][:, batch_idx, horizon_idx, action_dim_idx])
+    no_rtc_v_t = np.array(no_rtc_tracked["v_t"][:, batch_idx, horizon_idx, action_dim_idx])
+
+    num_steps = len(rtc_x_t)
+    step_indices = np.arange(num_steps)
+
+    # Create figure with subplots (3 rows, 2 columns)
+    fig, axes = plt.subplots(3, 2, figsize=figsize, sharex=True)
+    fig.suptitle(
+        f"RTC vs No-RTC Comparison (batch={batch_idx}, dim={action_dim_idx}, horizon={horizon_idx})",
+        fontsize=16,
+        fontweight="bold",
+    )
+
+    # Column titles
+    axes[0, 0].text(0.5, 1.15, "Without RTC", transform=axes[0, 0].transAxes,
+                    ha='center', fontsize=13, fontweight='bold', color='#555')
+    axes[0, 1].text(0.5, 1.15, "With RTC", transform=axes[0, 1].transAxes,
+                    ha='center', fontsize=13, fontweight='bold', color='#555')
+
+    # Row 1: x_t comparison
+    axes[0, 0].plot(step_indices, no_rtc_x_t, marker="o", linewidth=2, markersize=4, color="#2E86AB", label="No RTC")
+    axes[0, 0].set_ylabel("x_t (state)", fontsize=11, fontweight="bold")
+    axes[0, 0].grid(True, alpha=0.3)
+    axes[0, 0].set_title("State Trajectory", fontsize=10)
+
+    axes[0, 1].plot(step_indices, rtc_x_t, marker="o", linewidth=2, markersize=4, color="#2E86AB", label="RTC")
+    axes[0, 1].set_ylabel("x_t (state)", fontsize=11, fontweight="bold")
+    axes[0, 1].grid(True, alpha=0.3)
+    axes[0, 1].set_title("State Trajectory", fontsize=10)
+
+    # Row 2: v_t comparison
+    axes[1, 0].plot(step_indices, no_rtc_v_t, marker="s", linewidth=2, markersize=4, color="#A23B72")
+    axes[1, 0].set_ylabel("v_t (velocity)", fontsize=11, fontweight="bold")
+    axes[1, 0].grid(True, alpha=0.3)
+    axes[1, 0].set_title("Velocity Field", fontsize=10)
+
+    axes[1, 1].plot(step_indices, rtc_v_t, marker="s", linewidth=2, markersize=4, color="#A23B72")
+    axes[1, 1].set_ylabel("v_t (velocity)", fontsize=11, fontweight="bold")
+    axes[1, 1].grid(True, alpha=0.3)
+    axes[1, 1].set_title("Velocity Field", fontsize=10)
+
+    # Row 3: Correction (only for RTC) and overlay comparison
+    axes[2, 0].plot(step_indices, no_rtc_x_t, marker="o", linewidth=2, markersize=3,
+                   color="#2E86AB", alpha=0.7, label="No RTC")
+    axes[2, 0].plot(step_indices, rtc_x_t, marker="s", linewidth=2, markersize=3,
+                   color="#F18F01", alpha=0.7, label="With RTC")
+    axes[2, 0].set_ylabel("x_t overlay", fontsize=11, fontweight="bold")
+    axes[2, 0].set_xlabel("Step", fontsize=11, fontweight="bold")
+    axes[2, 0].grid(True, alpha=0.3)
+    axes[2, 0].set_title("Trajectory Comparison", fontsize=10)
+    axes[2, 0].legend(loc='best')
+
+    axes[2, 1].plot(step_indices, rtc_correction, marker="^", linewidth=2, markersize=4, color="#F18F01")
+    axes[2, 1].set_ylabel("correction", fontsize=11, fontweight="bold")
+    axes[2, 1].set_xlabel("Step", fontsize=11, fontweight="bold")
+    axes[2, 1].grid(True, alpha=0.3)
+    axes[2, 1].set_title("RTC Correction", fontsize=10)
+
+    plt.tight_layout()
+    return fig
+
+
+def plot_rtc_comparison_grid(
+    rtc_tracked: dict,
+    no_rtc_tracked: dict,
+    batch_idx: int = 0,
+    action_dim_indices: list[int] | None = None,
+    horizon_idx: int = 0,
+    figsize: tuple[int, int] = (20, 14),
+) -> Figure:
+    """Compare RTC vs non-RTC for multiple action dimensions in a grid.
+
+    Args:
+        rtc_tracked: Tracked steps from realtime_action with RTC
+        no_rtc_tracked: Tracked steps from regular action (no RTC)
+        batch_idx: Which batch element to visualize
+        action_dim_indices: List of action dimensions to plot (if None, plots first 3)
+        horizon_idx: Which horizon step to visualize
+        figsize: Figure size (width, height)
+
+    Returns:
+        Matplotlib Figure object
+    """
+    # Extract data
+    rtc_x_t = np.array(rtc_tracked["x_t"][:, batch_idx, horizon_idx])  # [num_steps, action_dim]
+    rtc_v_t = np.array(rtc_tracked["v_t"][:, batch_idx, horizon_idx])
+    no_rtc_x_t = np.array(no_rtc_tracked["x_t"][:, batch_idx, horizon_idx])
+    no_rtc_v_t = np.array(no_rtc_tracked["v_t"][:, batch_idx, horizon_idx])
+
+    num_steps, action_dim = rtc_x_t.shape
+    step_indices = np.arange(num_steps)
+
+    if action_dim_indices is None:
+        action_dim_indices = list(range(min(3, action_dim)))
+
+    num_dims = len(action_dim_indices)
+    fig, axes = plt.subplots(num_dims, 2, figsize=figsize, sharex=True)
+
+    if num_dims == 1:
+        axes = axes.reshape(1, -1)
+
+    fig.suptitle(
+        f"RTC vs No-RTC Grid Comparison (batch={batch_idx}, horizon={horizon_idx})",
+        fontsize=16,
+        fontweight="bold",
+    )
+
+    # Column titles
+    axes[0, 0].text(0.5, 1.15, "x_t Trajectory", transform=axes[0, 0].transAxes,
+                    ha='center', fontsize=13, fontweight='bold', color='#555')
+    axes[0, 1].text(0.5, 1.15, "v_t Velocity", transform=axes[0, 1].transAxes,
+                    ha='center', fontsize=13, fontweight='bold', color='#555')
+
+    colors_no_rtc = ["#2E86AB", "#5FA8D3", "#89CFF0"]
+    colors_rtc = ["#F18F01", "#FF9E1B", "#FFAD33"]
+
+    for i, dim_idx in enumerate(action_dim_indices):
+        color_no = colors_no_rtc[i % len(colors_no_rtc)]
+        color_yes = colors_rtc[i % len(colors_rtc)]
+
+        # Plot x_t comparison
+        axes[i, 0].plot(step_indices, no_rtc_x_t[:, dim_idx], marker="o", linewidth=2,
+                       markersize=3, color=color_no, alpha=0.7, label="No RTC")
+        axes[i, 0].plot(step_indices, rtc_x_t[:, dim_idx], marker="s", linewidth=2,
+                       markersize=3, color=color_yes, alpha=0.7, label="With RTC")
+        axes[i, 0].set_ylabel(f"Dim {dim_idx}", fontsize=10, fontweight="bold")
+        axes[i, 0].grid(True, alpha=0.3)
+        axes[i, 0].legend(loc='upper right', fontsize=8)
+
+        # Plot v_t comparison
+        axes[i, 1].plot(step_indices, no_rtc_v_t[:, dim_idx], marker="o", linewidth=2,
+                       markersize=3, color=color_no, alpha=0.7, label="No RTC")
+        axes[i, 1].plot(step_indices, rtc_v_t[:, dim_idx], marker="s", linewidth=2,
+                       markersize=3, color=color_yes, alpha=0.7, label="With RTC")
+        axes[i, 1].grid(True, alpha=0.3)
+        axes[i, 1].legend(loc='upper right', fontsize=8)
+
+        if i == num_dims - 1:
+            axes[i, 0].set_xlabel("Step", fontsize=10)
+            axes[i, 1].set_xlabel("Step", fontsize=10)
+
+    plt.tight_layout()
+    return fig
